@@ -1,0 +1,1 @@
+add_subdirectory(srrg_slam_interfaces)
