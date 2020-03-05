@@ -16,7 +16,7 @@ Other additional `srrg2` packages:
 To know how to build the `srrg2_slam_interfaces` package, please refer to the [`readme`](srrg2_slam_interfaces/README.md) file in the Catkin package. If you want to build also the additional `srrg2` packages, refer to the instructions in their readme files.
 
 ## Publications
-To have a more detailed overview on this solver, you can read our new [preprint](https://arxiv.org/abs/2003.00754).
+To have a more detailed overview on this architecture, you can read our new [preprint](https://arxiv.org/abs/2003.00754).
 If you use our code, please cite us in your work.
 ```bibtex
 @misc{colosi2020plugandplay,
