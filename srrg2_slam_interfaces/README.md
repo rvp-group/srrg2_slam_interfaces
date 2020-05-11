@@ -56,7 +56,7 @@ catkin build srrg2_slam_interfaces --catkin-make-args tests
 This package provides only basic unit-tests as executables. Please refer to one of our pipelines to test it:
 
 * [`srrg2_laser_slam_2d`](https://github.com/srrg-sapienza/srrg2_laser_slam_2d): multi-cue 2D-LiDAR pipeline; it can manage multiple laser rangefinders together with wheel odometry.
-* [`srrg2_proslam`](https://github.com/srrg-sapienza/srrg2_proslam): VO pipeline (Stereo or RGB-D).
+* [`srrg2_proslam`](https://github.com/srrg-sapienza/srrg2_proslam): VO pipeline (Stereo or RGB-D) that natively supports sensor offsets.
 
 Additional packages:
 * [`srrg2_executor`](https://github.com/srrg-sapienza/srrg2_executor): provides a shell interface to load, modify and run `BOSS` configuration file; this is the main package to **run all `srrg2` pipelines**.

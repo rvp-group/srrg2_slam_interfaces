@@ -2,7 +2,7 @@
 
 #include "srrg_geometry/geometry2d.h"
 #include "srrg_geometry/geometry3d.h"
-#include "srrg_slam_interfaces/instances.h"
+#include "srrg2_slam_interfaces/instances.h"
 
 using namespace srrg2_slam_interfaces;
 using namespace srrg2_core;
@@ -18,14 +18,14 @@ public:
   using BaseType = MultiTracker3D;
 
   // ds set new empty scene and change into tracking state
-  void setScene(SceneType* scene_) {
+  void setScene(SceneContainerType* scene_) {
     BaseType::setScene(scene_);
     _status = TrackerBase::Tracking;
   }
 
   // ds adaption always leads to tracking state (with prior slice only)
-  void adaptMeasurements() override {
-    BaseType::adaptMeasurements();
+  void preprocessRawData() override {
+    BaseType::preprocessRawData();
     _status = TrackerBase::Tracking;
   }
 
@@ -48,14 +48,14 @@ TEST(MultiAlignerSliceMotionModel3D, Random) {
   setup(tracker, aligner);
   // ds local map container, starting pose and dummy measurement
   PropertyContainerDynamic local_map;
-  Isometry3f previous_estimate(Isometry3f::Identity());
+  Isometry3f previous_robot_in_local_map(Isometry3f::Identity());
   BaseSensorMessagePtr message(new BaseSensorMessage());
 
   // ds process initial measurement
   tracker->setScene(&local_map);
   tracker->populateScene(local_map);
-  tracker->setEstimate(previous_estimate);
-  tracker->setMeasurement(message);
+  tracker->setRobotInLocalMap(previous_robot_in_local_map);
+  tracker->setRawData(message);
   tracker->compute();
 
   // ds simulate motion
@@ -69,22 +69,22 @@ TEST(MultiAlignerSliceMotionModel3D, Random) {
     motion.rotate(AngleAxisf(rand() * M_PI, Vector3f::UnitZ()));
 
     // ds update tracker for new pose
-    const Isometry3f current_estimate(previous_estimate * motion);
-    tracker->setEstimate(current_estimate);
-    tracker->setMeasurement(message);
+    const Isometry3f robot_in_local_map(previous_robot_in_local_map * motion);
+    tracker->setRobotInLocalMap(robot_in_local_map);
+    tracker->setRawData(message);
     tracker->compute();
-    
+
     // ds the motion model should correspond to the previous true motion
     ASSERT_EQ(tracker->status(), MultiTracker3D::Status::Tracking);
 
     // ds recall that the aligner operates in flipped transform (i.e. moving -> fixed)
-    const Vector6f error =
-      geometry3d::t2v(motion_previous.inverse()) - geometry3d::t2v(aligner->estimate());
+    const Vector6f error = geometry3d::t2v(aligner->movingInFixed() * motion_previous);
+    //      geometry3d::t2v(motion_previous.inverse()) - geometry3d::t2v(aligner->movingInFixed());
 
     // ds no noise, no error
     ASSERT_LT(error.norm(), 1e-5 /*float inverses*/);
-    previous_estimate = current_estimate;
-    motion_previous   = motion;
+    previous_robot_in_local_map = robot_in_local_map;
+    motion_previous             = motion;
   }
 }
 
@@ -102,8 +102,8 @@ TEST(MultiAlignerSliceMotionModel3D, LocalMapCreation) {
   // ds process initial measurement
   tracker->populateScene(local_map);
   tracker->setScene(&local_map);
-  tracker->setEstimate(previous_estimate);
-  tracker->setMeasurement(message);
+  tracker->setRobotInLocalMap(previous_estimate);
+  tracker->setRawData(message);
   tracker->compute();
 
   // ds simulate motion
@@ -115,33 +115,32 @@ TEST(MultiAlignerSliceMotionModel3D, LocalMapCreation) {
     motion.rotate(AngleAxisf(rand() * M_PI, Vector3f::UnitX()));
     motion.rotate(AngleAxisf(rand() * M_PI, Vector3f::UnitY()));
     motion.rotate(AngleAxisf(rand() * M_PI, Vector3f::UnitZ()));
-    Isometry3f current_estimate(previous_estimate * motion);
+    Isometry3f current_robot_in_local_map(previous_estimate * motion);
 
     // ds advance tracker in current sequence (as in SLAM)
-    tracker->setMeasurement(message);
-    tracker->adaptMeasurements();
+    tracker->setRawData(message);
+    tracker->preprocessRawData();
     tracker->align();
 
     // ds simulate multiple consecutive new local map creations
     if (i % 10 == 0) {
-      current_estimate = motion;
+      current_robot_in_local_map = motion;
       PropertyContainerDynamic new_local_map;
       tracker->populateScene(new_local_map);
       tracker->setScene(&new_local_map);
     }
-    tracker->setEstimate(current_estimate);
+    tracker->setRobotInLocalMap(current_robot_in_local_map);
     tracker->merge();
 
     // ds the motion model should correspond to the previous true motion
     ASSERT_EQ(tracker->status(), MultiTracker3D::Status::Tracking);
 
     // ds recall that the aligner operates in flipped transform (i.e. moving -> fixed)
-    const Vector6f error =
-      geometry3d::t2v(motion_previous.inverse()) - geometry3d::t2v(aligner->estimate());
+    const Vector6f error = geometry3d::t2v(aligner->movingInFixed() * motion_previous);
 
     // ds no noise, no error
     ASSERT_LT(error.norm(), 1e-5 /*float inverses*/);
-    previous_estimate = current_estimate;
+    previous_estimate = current_robot_in_local_map;
     motion_previous   = motion;
   }
 }
@@ -160,8 +159,8 @@ TEST(MultiAlignerSliceMotionModel3D, Relocalization) {
   // ds process initial measurement
   tracker->populateScene(local_map_a);
   tracker->setScene(&local_map_a);
-  tracker->setEstimate(estimate_origin_a);
-  tracker->setMeasurement(message);
+  tracker->setRobotInLocalMap(estimate_origin_a);
+  tracker->setRawData(message);
   tracker->compute();
 
   // ds simulate motion
@@ -178,9 +177,9 @@ TEST(MultiAlignerSliceMotionModel3D, Relocalization) {
     const Isometry3f motion_transform(current_estimate * previous_estimate.inverse());
 
     // ds advance tracker in current sequence (as in SLAM)
-    tracker->setMeasurement(message);
-    tracker->adaptMeasurements();
-    tracker->setEstimate(current_estimate);
+    tracker->setRawData(message);
+    tracker->preprocessRawData();
+    tracker->setRobotInLocalMap(current_estimate);
     tracker->align();
 
     // ds simulate multiple relocalization - move into another local map (b)
@@ -211,15 +210,14 @@ TEST(MultiAlignerSliceMotionModel3D, Relocalization) {
       tracker->setClosure(CorrespondenceVector(), relocalization_transform, current_estimate);
       tracker->setScene(&local_map_b);
     }
-    tracker->setEstimate(current_estimate);
+    tracker->setRobotInLocalMap(current_estimate);
     tracker->merge();
 
     // ds the motion model should correspond to the previous true motion
     ASSERT_EQ(tracker->status(), MultiTracker3D::Status::Tracking);
 
     // ds recall that the aligner operates in flipped transform (i.e. moving -> fixed)
-    const Vector6f error =
-      geometry3d::t2v(motion_previous.inverse()) - geometry3d::t2v(aligner->estimate());
+    const Vector6f error = geometry3d::t2v(aligner->movingInFixed() * motion_previous);
 
     // ds no noise, no error
     ASSERT_LT(error.norm(), 1e-4 /*float inverses*/);
@@ -233,9 +231,9 @@ TEST(MultiAlignerSliceMotionModel3D, Relocalization) {
 // ds align does not overwrite the tracker estimate based on motion model
 void MockedMultiTracker3D::align() {
   // ds configure aligner
-  AlignerPtrType aligner = param_aligner.value();
-  aligner->setFixed(&_adapted_measurements);
-  aligner->setMoving(&_clipped_scene);
+  AlignerTypePtr aligner = param_aligner.value();
+  aligner->setFixed(&_measurement_container);
+  aligner->setMoving(&_clipped_scene_container);
 
   // ds compute relative transform between all fixed and moving slices
   aligner->compute();
@@ -250,7 +248,7 @@ void MockedMultiTracker3D::align() {
     // ds here the tracker estimate would be updated based on the alignment result
 
     // ds update tracker estimate with current one (changed externally)
-    setEstimate(_tracker_estimate);
+    setRobotInLocalMap(_robot_in_local_map);
   } else {
     _status = TrackerBase::Lost;
   }
@@ -258,20 +256,21 @@ void MockedMultiTracker3D::align() {
 
 // ds tracker and aligner setup
 void setup(MockedMultiTracker3DPtr& tracker_, MultiAligner3DQRPtr& aligner_) {
-  slam_interfaces_registerTypes();
+  srrg2_slam_interfaces_registerTypes();
 
   // ds tracker configuration
   tracker_ = MockedMultiTracker3DPtr(new MockedMultiTracker3D());
-  MultiTrackerSliceEstimationBuffer3DPtr tracker_slice(new MultiTrackerSliceEstimationBuffer3D());
+  TrackerSliceProcessorEstimationBuffer3DPtr tracker_slice(
+    new TrackerSliceProcessorEstimationBuffer3D());
   tracker_slice->param_measurement_slice_name.setValue("tracker_pose");
   tracker_slice->param_adaptor.setValue(
-    MeasurementAdaptorTrackerEstimate3DPtr(new MeasurementAdaptorTrackerEstimate3D()));
+    RawDataPreprocessorTrackerEstimate3DPtr(new RawDataPreprocessorTrackerEstimate3D()));
   tracker_->param_slice_processors.pushBack(tracker_slice);
 
   // ds aligner configuration
   aligner_ = MultiAligner3DQRPtr(new MultiAligner3DQR());
   tracker_->param_aligner.setValue(aligner_);
-  MultiAlignerSliceMotionModel3DPtr aligner_slice(new MultiAlignerSliceMotionModel3D());
+  AlignerSliceMotionModel3DPtr aligner_slice(new AlignerSliceMotionModel3D);
   aligner_slice->param_motion_model.setValue(
     MotionModelConstantVelocity3DPtr(new MotionModelConstantVelocity3D()));
   aligner_slice->param_fixed_slice_name.setValue("tracker_pose");

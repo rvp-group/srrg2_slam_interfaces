@@ -1,1 +1,1 @@
-add_subdirectory(srrg_slam_interfaces)
+add_subdirectory(srrg2_slam_interfaces)

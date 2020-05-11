@@ -6,7 +6,7 @@ This repository contains a single Catkin package:
 This package alone is not a complete SLAM system. The following additional `srrg2` packages built on top of `srrg2_slam_interfaces` constitute the complete pipelines:
 
 * [`srrg2_laser_slam_2d`](https://github.com/srrg-sapienza/srrg2_laser_slam_2d): multi-cue 2D-LiDAR pipeline; it can manage multiple laser rangefinders together with wheel odometry.
-* [`srrg2_proslam`](https://github.com/srrg-sapienza/srrg2_proslam): VO pipeline (Stereo or RGB-D).
+* [`srrg2_proslam`](https://github.com/srrg-sapienza/srrg2_proslam): VO pipeline (Stereo or RGB-D) that natively supports sensor offsets.
 
 Other additional `srrg2` packages:
 
